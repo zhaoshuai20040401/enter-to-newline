@@ -1,5 +1,7 @@
 # Enter = 换行，Ctrl+Enter = 发送（DeepSeek + 豆包 网页版）
 
+> **一键安装（油猴）：** [点这里安装脚本](https://raw.githubusercontent.com/zhaoshuai20040401/enter-to-newline/main/dist/enter-to-newline.user.js) · [项目主页](https://github.com/zhaoshuai20040401/enter-to-newline) · MIT License
+
 把 DeepSeek 网页版（`chat.deepseek.com`）和豆包网页版（`www.doubao.com`）的输入框改成：
 
 | 按键 | 行为 |
