@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>mock: 豆包 输入框</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; }
+  #editor { min-height: 90px; width: 420px; border: 1px solid #888; padding: 8px; border-radius: 8px; }
+  #send { margin-top: 8px; padding: 4px 12px; border-radius: 6px; }
+  #messages { margin-top: 12px; color: #444; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="editor" contenteditable="true" role="textbox" data-testid="chat_input_input"></div>
+  <button id="send" data-testid="chat_input_send_button" aria-label="发送" disabled>发送</button>
+  <div id="messages"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // ?hostile=1 模拟两种最坏情况：
+  //   1) 站点对合成事件免疫（检查 isTrusted）
+  //   2) 站点压根不认识 Shift+Enter
+  // 这时脚本必须走 execCommand 兜底换行 + 点击发送按钮兜底发送。
+  var hostile = new URLSearchParams(location.search).has('hostile');
+
+  var ed = document.getElementById('editor');
+  var sendBtn = document.getElementById('send');
+
+  window.__sends = [];
+  window.__hostileMode = hostile;
+
+  function text() { return ed.innerText || ed.textContent || ''; }
+
+  function render() {
+    sendBtn.disabled = text().trim().length === 0;
+    document.getElementById('messages').textContent =
+      window.__sends.length ? '已发送：' + window.__sends.join(' | ') : '（没有发送任何消息）';
+  }
+
+  ed.addEventListener('input', render);
+
+  function send() {
+    if (!text().trim()) return;
+    window.__sends.push(ed.innerHTML);
+    ed.innerHTML = '';
+    render();
+  }
+
+  // 站点行为：Enter = 发送；Shift+Enter = 编辑器自己的换行命令
+  ed.addEventListener('keydown', function (e) {
+    if (!e.isTrusted && hostile) return;
+    if (e.key !== 'Enter') return;
+    if (e.shiftKey) {
+      if (hostile) return;
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+      render();
+      return;
+    }
+    e.preventDefault();
+    send();
+  });
+
+  sendBtn.addEventListener('click', send);
+
+  window.__state = function () {
+    return {
+      text: text(),
+      html: ed.innerHTML,
+      sends: window.__sends.slice(),
+      hostile: hostile
+    };
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

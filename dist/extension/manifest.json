@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Enter 换行 / Ctrl+Enter 发送（DeepSeek + 豆包）",
+  "version": "1.0.0",
+  "description": "把 DeepSeek、豆包网页版的回车键改成换行，Ctrl/Cmd+Enter 才发送消息。",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.deepseek.com/*",
+        "https://www.doubao.com/*",
+        "https://doubao.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

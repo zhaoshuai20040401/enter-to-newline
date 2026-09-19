@@ -1,0 +1,11 @@
+# 依赖
+node_modules/
+
+# 测试时 Chrome 的临时用户目录
+.chrome-profile/
+*.log
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>mock: DeepSeek 输入框</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; }
+  #chat-input { width: 420px; height: 90px; }
+  #rename { width: 260px; }
+  #send { display: inline-block; padding: 4px 12px; border: 1px solid #888; border-radius: 6px; cursor: pointer; }
+  #send[aria-disabled="true"] { opacity: .4; cursor: default; }
+  #messages { margin-top: 12px; color: #444; }
+  #rename-dialog { margin-top: 24px; border: 1px dashed #bbb; padding: 12px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <form id="composer" onsubmit="return false;">
+    <textarea id="chat-input" rows="3" placeholder="给 DeepSeek 发送消息"></textarea>
+    <div id="send" role="button" tabindex="0" aria-disabled="true">发送</div>
+  </form>
+  <div id="messages"></div>
+
+  <!-- 用来验证：弹窗里的输入框不应该被接管 -->
+  <div id="rename-dialog" role="dialog" aria-modal="true">
+    <textarea id="rename" rows="2" placeholder="重命名对话"></textarea>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // ?lock=1 模拟「禁止浏览器原生插入换行」的编辑器（beforeinput 被拦截），
+  // 用来触发脚本里的兜底插入路径。
+  var lock = new URLSearchParams(location.search).has('lock');
+
+  var ta = document.getElementById('chat-input');
+  var sendBtn = document.getElementById('send');
+  var rename = document.getElementById('rename');
+
+  var state = '';            // 受控组件的唯一真源（模拟 React state）
+  window.__sends = [];       // 已发送的消息
+  window.__renamed = 0;      // 弹窗里按回车确认改名的次数
+  window.__enterKeydownSeen = 0;  // 站点真正看到的回车次数
+  window.__lockMode = lock;
+
+  function render() {
+    if (ta.value !== state) ta.value = state;
+    var has = state.trim().length > 0;
+    sendBtn.setAttribute('aria-disabled', has ? 'false' : 'true');
+    if (has) sendBtn.removeAttribute('disabled');
+    else sendBtn.setAttribute('disabled', '');
+    document.getElementById('messages').textContent =
+      window.__sends.length ? '已发送：' + window.__sends.join(' | ') : '（没有发送任何消息）';
+  }
+
+  // 受控组件：每次输入都把 state 同步成 DOM 的值
+  ta.addEventListener('input', function () { state = ta.value; render(); });
+
+  if (lock) {
+    // 只拦「回车换行」，普通打字不受影响
+    ta.addEventListener('beforeinput', function (e) {
+      if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') e.preventDefault();
+    });
+  }
+
+  // 真实站点也会跟踪输入法状态：组合期间的回车是「上屏/选字」，不能当发送
+  var siteComposing = false;
+  ta.addEventListener('compositionstart', function () { siteComposing = true; });
+  ta.addEventListener('compositionend', function () { siteComposing = false; });
+
+  // 站点行为：Enter = 发送（Shift+Enter 交给浏览器原生换行）
+  ta.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    // 只要这里 +1，就说明这个回车「穿过了脚本的捕获阶段」被站点看到了。
+    // 用来验证脚本确实在输入法组合期间放行、其余情况拦下。
+    window.__enterKeydownSeen++;
+    if (e.isComposing || siteComposing) return;
+    if (e.shiftKey) return;
+    e.preventDefault();
+    send();
+  });
+
+  function send() {
+    if (!state.trim()) return;
+    window.__sends.push(state);
+    state = '';
+    ta.value = '';
+    render();
+  }
+  sendBtn.addEventListener('click', send);
+
+  // 弹窗里的输入框：回车 = 确认改名（原生换行被 preventDefault）
+  rename.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    window.__renamed++;
+  });
+
+  window.__state = function () {
+    return {
+      text: state,
+      value: ta.value,
+      sends: window.__sends.slice(),
+      renamed: window.__renamed,
+      enterSeenBySite: window.__enterKeydownSeen,
+      lock: lock
+    };
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

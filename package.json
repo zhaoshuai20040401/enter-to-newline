@@ -1,0 +1,12 @@
+{
+  "name": "enter-to-newline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "把 DeepSeek / 豆包 网页版的 Enter 改成换行，Ctrl+Enter 才发送",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs && node test/run.mjs"
+  },
+  "license": "MIT"
+}
