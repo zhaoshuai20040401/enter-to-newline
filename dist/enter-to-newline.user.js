@@ -2,7 +2,7 @@
 // @name         Enter 换行 / Ctrl+Enter 发送（DeepSeek + 豆包）
 // @name:en      Enter = Newline, Ctrl+Enter = Send (DeepSeek + Doubao)
 // @namespace    https://github.com/zhaoshuai20040401/enter-to-newline
-// @version      1.0.0
+// @version      1.0.1
 // @description  把 DeepSeek、豆包网页版的回车键改成换行，Ctrl/Cmd+Enter 才发送消息。
 // @description:en Swap Enter/Ctrl+Enter on DeepSeek and Doubao web chat.
 // @author       zhaoshuai20040401
@@ -59,7 +59,7 @@
   if (window.__enterToNewlineLoaded) return;
   window.__enterToNewlineLoaded = true;
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.0.1';
   var PREFIX = '[Enter换行]';
   var KEY_ENABLED = 'enter-to-newline:enabled:';   // 按站点分别记忆开关
   var KEY_DEBUG = 'enter-to-newline:debug';
@@ -275,12 +275,33 @@
     return isVisible(el);
   }
 
+  // 在输入框所在的 DOM 作用域里查找。输入框如果在 shadow DOM 内，
+  // 发送按钮多半也在同一个 shadow root 里，document.querySelectorAll 是找不到的。
+  function queryAllScopes(el, selector) {
+    var out = [], roots = [];
+    try {
+      var r = el.getRootNode && el.getRootNode();
+      if (r) roots.push(r);
+    } catch (e) { /* ignore */ }
+    if (roots.indexOf(document) === -1) roots.push(document);
+
+    for (var i = 0; i < roots.length; i++) {
+      try {
+        var list = roots[i].querySelectorAll(selector);
+        for (var j = 0; j < list.length; j++) {
+          if (out.indexOf(list[j]) === -1) out.push(list[j]);
+        }
+      } catch (e) { /* 忽略非法选择器 */ }
+    }
+    return out;
+  }
+
   function findSendButton(el) {
     var i, j, nodes;
 
     // 1) 站点已知选择器
     for (i = 0; i < site.sendButton.length; i++) {
-      try { nodes = document.querySelectorAll(site.sendButton[i]); } catch (e) { continue; }
+      nodes = queryAllScopes(el, site.sendButton[i]);
       for (j = 0; j < nodes.length; j++) {
         var b = nodes[j].closest('button,[role="button"]') || nodes[j];
         if (clickable(b)) return b;
@@ -288,7 +309,7 @@
     }
 
     // 2) 语义匹配（aria-label / title / data-testid / 文本）
-    nodes = document.querySelectorAll('button,[role="button"]');
+    nodes = queryAllScopes(el, 'button,[role="button"]');
     for (i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       if (!clickable(n)) continue;
@@ -364,6 +385,17 @@
            event.code === 'NumpadEnter' || event.keyCode === 13;
   }
 
+  // 取真正被按下的元素。输入框如果以后被站点挪进 shadow DOM，
+  // window 捕获阶段拿到的 event.target 会是 shadow 宿主（外层自定义元素），
+  // 而 composedPath()[0] 才是里面那个真正的可编辑元素。
+  function realTarget(event) {
+    if (typeof event.composedPath === 'function') {
+      var path = event.composedPath();
+      if (path && path.length && path[0] && path[0].nodeType === 1) return path[0];
+    }
+    return event.target;
+  }
+
   function onKeyDown(event) {
     if (!enabled) return;
     if (!event.isTrusted) return;                                  // 自己派发的合成事件
@@ -374,7 +406,7 @@
       return;
     }
 
-    var el = event.target;
+    var el = realTarget(event);
     if (!isComposer(el)) return;
 
     if (event.ctrlKey || event.metaKey) {
@@ -452,11 +484,11 @@
     version: VERSION,
     site: site.id,
     status: function () {
-      console.log(PREFIX + ' 站点=' + site.label +
+      console.log(PREFIX + ' v' + VERSION + ' 站点=' + site.label +
         ' 接管=' + (enabled ? '开' : '关') +
         ' 调试=' + (debug ? '开' : '关') +
         ' 悬浮开关=' + (badgeEl ? '开' : '关'));
-      return { site: site.id, enabled: enabled, debug: debug, badge: !!badgeEl };
+      return { version: VERSION, site: site.id, enabled: enabled, debug: debug, badge: !!badgeEl };
     },
     enable: function () { return setEnabled(true); },
     disable: function () { return setEnabled(false); },

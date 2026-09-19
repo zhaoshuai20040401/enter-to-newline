@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>mock: DeepSeek 输入框（shadow DOM）</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; }
+  #messages { margin-top: 12px; color: #444; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <ds-composer></ds-composer>
+  <div id="messages"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // 模拟「输入框被包进 Web Component / shadow DOM」的站点改版。
+  // 这种情况下 window 捕获阶段拿到的 event.target 是宿主元素 <ds-composer>，
+  // 必须用 composedPath()[0] 才能拿到里面真正的 textarea。
+  //
+  // ?hostile=1 额外模拟站点对合成事件免疫（检查 isTrusted），
+  // 用来验证「发送按钮的查找」也能穿透进 shadow root 内部。
+  var hostile = new URLSearchParams(location.search).has('hostile');
+
+  window.__seenBySite = 0;    // 站点真正收到了几次「真实」回车（用来证明脚本拦住了）
+  window.__buttonClicks = 0;  // 发送按钮被点了几次（用来证明走的是点按钮兜底）
+  window.__hostileMode = hostile;
+
+  var MESSAGES = document.getElementById('messages');
+
+  function render(sends) {
+    MESSAGES.textContent = sends.length ? '已发送：' + sends.join(' | ') : '（没有发送任何消息）';
+  }
+
+  class DsComposer extends HTMLElement {
+    connectedCallback() {
+      var root = this.attachShadow({ mode: 'open' });
+      root.innerHTML =
+        '<form onsubmit="return false;">' +
+        '<textarea id="chat-input" rows="3" placeholder="给 DeepSeek 发送消息"></textarea>' +
+        '<div id="send" role="button" tabindex="0" aria-disabled="true">发送</div>' +
+        '</form>';
+
+      this.ta = root.getElementById('chat-input');
+      this.btn = root.getElementById('send');
+      this.state = '';
+      this.sends = [];
+
+      var self = this;
+      this.ta.addEventListener('input', function () { self.state = self.ta.value; self.render(); });
+
+      this.ta.addEventListener('keydown', function (e) {
+        if (e.isTrusted) window.__seenBySite++;   // 只统计真实按键，合成事件不算
+        if (!e.isTrusted && hostile) return;
+        if (e.key !== 'Enter') return;
+        if (e.shiftKey) return;                   // Shift+Enter 交给原生换行
+        e.preventDefault();
+        self.send();
+      });
+
+      this.btn.addEventListener('click', function () {
+        window.__buttonClicks++;
+        self.send();
+      });
+
+      this.render();
+    }
+
+    render() {
+      var has = this.state.trim().length > 0;
+      this.btn.setAttribute('aria-disabled', has ? 'false' : 'true');
+      render(this.sends);
+    }
+
+    send() {
+      if (!this.state.trim()) return;
+      this.sends.push(this.state);
+      this.state = '';
+      this.ta.value = '';
+      this.render();
+    }
+  }
+  customElements.define('ds-composer', DsComposer);
+
+  window.__state = function () {
+    var c = document.querySelector('ds-composer');
+    return {
+      text: c.state,
+      value: c.ta.value,
+      sends: c.sends.slice(),
+      seenBySite: window.__seenBySite,
+      buttonClicks: window.__buttonClicks,
+      hostile: hostile,
+      shadow: true
+    };
+  };
+})();
+</script>
+</body>
+</html>

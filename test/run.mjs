@@ -54,7 +54,9 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const webPort = server.address().port;
 
 const DEEPSEEK = `http://chat.deepseek.com:${webPort}/deepseek.html`;
+const SHADOW = `http://chat.deepseek.com:${webPort}/shadow.html`;
 const DOUBAO = `http://www.doubao.com:${webPort}/doubao.html`;
+const SHADOW_INPUT = 'document.querySelector("ds-composer").shadowRoot.getElementById("chat-input")';
 
 /* ───────────────────────── 启动 Chrome ───────────────────────── */
 
@@ -182,6 +184,10 @@ class Page {
   }
   async focus(selector) {
     await this.eval(`document.querySelector(${JSON.stringify(selector)}).focus(); true`);
+  }
+  // 焦点要打到 shadow root 里面去
+  async focusShadow() {
+    await this.eval(`${SHADOW_INPUT}.focus(); true`);
   }
   async type(text) {
     await cdp.send('Input.insertText', { text });
@@ -344,6 +350,38 @@ async function testDoubaoHostile() {
   check('合成回车无效时，改用点击发送按钮完成发送', s.sends.length === 1, JSON.stringify(s.sends));
 }
 
+async function testShadowDom() {
+  console.log('\n[9] DeepSeek（输入框被包进 shadow DOM）：仍然能识别并接管');
+  await page.goto(SHADOW);
+  await page.inject();
+  check('脚本已加载', await page.eval('window.__enterToNewlineLoaded === true'), '未加载');
+
+  await page.focusShadow();
+  await page.type('影子');
+  await page.pressEnter();
+  let s = await page.eval('window.__state()');
+  check('Enter 在 shadow DOM 里的输入框插入了换行', s.text === '影子\n', JSON.stringify(s));
+  check('Enter 没有触发发送', s.sends.length === 0, JSON.stringify(s.sends));
+  check('站点没收到这个回车（说明拦到了 shadow root 里面的元素）', s.seenBySite === 0, JSON.stringify(s));
+
+  await page.pressEnter({ ctrl: true });
+  s = await page.eval('window.__state()');
+  check('Ctrl+Enter 触发了发送', s.sends.length === 1, JSON.stringify(s.sends));
+}
+
+async function testShadowDomHostile() {
+  console.log('\n[10] shadow DOM + 站点无视合成事件：发送按钮要能从 shadow root 里找到');
+  await page.goto(SHADOW + '?hostile=1');
+  await page.inject();
+  await page.focusShadow();
+  await page.type('穿透');
+  await page.pressEnter({ ctrl: true });
+  const s = await page.eval('window.__state()');
+  check('站点没收到这个 Ctrl+Enter（被脚本在捕获阶段拦下）', s.seenBySite === 0, JSON.stringify(s));
+  check('点到了 shadow root 内部的发送按钮（走的是点按钮兜底）', s.buttonClicks === 1, JSON.stringify(s));
+  check('消息确实发出去了', s.sends.length === 1 && s.sends[0] === '穿透', JSON.stringify(s.sends));
+}
+
 async function testToggleOff() {
   console.log('\n[8] 开关：关掉接管后恢复站点原生行为');
   await page.goto(DEEPSEEK);
@@ -373,12 +411,17 @@ const scenarios = [
   testDeepSeekIme,
   testDoubaoBasic,
   testDoubaoHostile,
+  testShadowDom,
+  testShadowDomHostile,
   testToggleOff,
 ];
 
 try {
   console.log('开始验证（本地 Chrome + CDP，域名已解析到 mock 站点）');
+  const only = process.env.ETN_FILTER || '';
+  if (only) console.log(`（只跑匹配 "${only}" 的用例）`);
   for (const fn of scenarios) {
+    if (only && !fn.name.toLowerCase().includes(only.toLowerCase())) continue;
     try {
       await fn();
     } catch (e) {

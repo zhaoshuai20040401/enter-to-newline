@@ -22,7 +22,7 @@ const RAW_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/di
 
 const META = {
   name: 'Enter 换行 / Ctrl+Enter 发送（DeepSeek + 豆包）',
-  version: '1.0.0',
+  version: '1.0.1',
   description: '把 DeepSeek、豆包网页版的回车键改成换行，Ctrl/Cmd+Enter 才发送消息。',
   matches: [
     'https://chat.deepseek.com/*',
